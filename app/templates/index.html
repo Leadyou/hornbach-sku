@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dostępność SKU</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <h1>Dostępność SKU</h1>
+      <p class="sub">Sprawdzenie, czy pozycja jest dostępna w podanej ilości i na wybrany termin dostawy.</p>
+      <p class="meta">Rekordów w katalogu: <strong>{{ sku_count }}</strong></p>
+    </header>
+
+    {% if import_notice %}
+    <section class="card notice">
+      <h2>Import CSV</h2>
+      <p>Zaktualizowano lub dodano: <strong>{{ import_notice.inserted }}</strong> pozycji.</p>
+      {% if import_notice.errors %}
+      <ul class="errs">
+        {% for e in import_notice.errors %}
+        <li>{{ e }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if result %}
+    <section class="card result {% if result.ok %}ok{% else %}bad{% endif %}">
+      <h2>Wynik</h2>
+      <p class="msg">{{ result.message }}</p>
+      <dl class="grid">
+        <dt>SKU</dt><dd>{{ result.sku }}</dd>
+        <dt>Ilość</dt><dd>{{ result.quantity }}</dd>
+        <dt>Żądany termin dostawy</dt><dd>{{ result.requested_delivery_date }}</dd>
+        {% if result.stock_quantity is not none %}
+        <dt>Stan</dt><dd>{{ result.stock_quantity }}</dd>
+        {% endif %}
+        {% if result.lead_time_days is not none %}
+        <dt>Czas realizacji</dt><dd>{{ result.lead_time_days }} dni (kalendarzowo)</dd>
+        {% endif %}
+        {% if result.earliest_feasible_date %}
+        <dt>Najwcześniejsza data</dt><dd>{{ result.earliest_feasible_date }}</dd>
+        {% endif %}
+      </dl>
+      <p class="back"><a href="/">Sprawdź kolejny</a></p>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>Sprawdź dostępność</h2>
+      <form class="form" method="post" action="/check">
+        <label>
+          SKU
+          <input name="sku" required autocomplete="off" placeholder="np. 4012345678901" />
+        </label>
+        <label>
+          Ilość
+          <input name="quantity" type="number" min="1" required value="1" />
+        </label>
+        <label>
+          Termin dostawy (data)
+          <input name="requested_delivery_date" type="date" required />
+        </label>
+        <label>
+          Kod miejsca dostawy <span class="hint">(opcjonalnie, jeśli SKU jest przypisane do lokalizacji)</span>
+          <input name="delivery_location_code" autocomplete="off" placeholder="np. WH-PL-01" />
+        </label>
+        <button type="submit">Sprawdź</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Import katalogu (CSV)</h2>
+      <p class="hint">Kolumny: <code>sku,name,stock_quantity,lead_time_days,available_from,delivery_location_code</code></p>
+      <p class="hint"><code>available_from</code> — opcjonalnie, format <code>YYYY-MM-DD</code>. Puste pole lokalizacji = dowolna przy sprawdzaniu.</p>
+      <form class="form inline" method="post" action="/import" enctype="multipart/form-data">
+        <label class="file">
+          Plik CSV
+          <input name="file" type="file" accept=".csv,text/csv" required />
+        </label>
+        <button type="submit">Importuj</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

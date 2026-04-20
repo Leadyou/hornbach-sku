@@ -1,0 +1,5 @@
+sku,name,stock_quantity,lead_time_days,available_from,delivery_location_code
+4012345678901,Śruby M8 zestaw,500,3,,WH-PL-01
+5901234123457,Taśma malarska 48mm,80,7,2026-05-01,
+HB-DEMO-001,Przykład bez lokalizacji,1000,0,,
+
