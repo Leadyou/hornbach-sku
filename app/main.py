@@ -13,18 +13,21 @@ from app.csv_import import import_skus_csv
 from app.db import count_skus, get_supabase
 
 BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+PUBLIC_STATIC = ROOT_DIR / "public" / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    load_dotenv()
+    load_dotenv(ROOT_DIR / ".env")
     get_supabase()
     yield
 
 
 app = FastAPI(title="Sprawdzanie dostępności SKU", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+if PUBLIC_STATIC.is_dir():
+    app.mount("/static", StaticFiles(directory=str(PUBLIC_STATIC)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
