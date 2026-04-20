@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from datetime import date
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
-from backend.availability import check_availability
+from backend.availability import get_availability_report
 from backend.csv_import import import_skus_csv
 from backend.db import count_skus
 
@@ -20,6 +20,11 @@ BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
 PUBLIC_STATIC = ROOT_DIR / "public" / "static"
 _ON_VERCEL = bool(os.getenv("VERCEL"))
+
+
+class AnalyzeRequest(BaseModel):
+    sku: str = Field(default="", max_length=256)
+    quantity: int = Field(default=1, ge=1, le=10_000_000)
 
 
 @asynccontextmanager
@@ -82,50 +87,35 @@ def home(request: Request):
         return _db_error_response(request, e)
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "result": None, "import_notice": None, "sku_count": count},
+        {"request": request, "sku_count": count},
     )
 
 
-@app.post("/check", response_class=HTMLResponse)
-def check(
-    request: Request,
-    sku: str = Form(...),
-    quantity: int = Form(...),
-    requested_delivery_date: date = Form(...),
-    delivery_location_code: str = Form(""),
-):
+@app.post("/api/analyze")
+def api_analyze(request: Request, body: AnalyzeRequest):
     bad = _config_error_response(request)
     if bad:
-        return bad
+        return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
     try:
-        result = check_availability(sku, quantity, requested_delivery_date, delivery_location_code)
-        count = count_skus()
+        report = get_availability_report(body.sku, body.quantity, "")
+        return JSONResponse(report)
     except Exception as e:
-        print("hornbach-sku check:", repr(e), flush=True)
-        return _db_error_response(request, e)
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "result": result, "import_notice": None, "sku_count": count},
-    )
+        print("hornbach-sku api_analyze:", repr(e), flush=True)
+        return JSONResponse({"ok": False, "code": "server", "message": str(e)}, status_code=500)
 
 
-@app.post("/import", response_class=HTMLResponse)
-async def import_csv(request: Request, file: UploadFile = File(...)):
+@app.post("/api/import")
+async def api_import(request: Request, file: UploadFile = File(...)):
     bad = _config_error_response(request)
     if bad:
-        return bad
+        return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
     raw = (await file.read()).decode("utf-8-sig")
     try:
         inserted, errs = import_skus_csv(raw)
-        notice = {"inserted": inserted, "errors": errs}
-        count = count_skus()
+        return JSONResponse({"ok": True, "inserted": inserted, "errors": errs})
     except Exception as e:
-        print("hornbach-sku import:", repr(e), flush=True)
-        return _db_error_response(request, e)
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "result": None, "import_notice": notice, "sku_count": count},
-    )
+        print("hornbach-sku api_import:", repr(e), flush=True)
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=500)
 
 
 @app.get("/favicon.ico")

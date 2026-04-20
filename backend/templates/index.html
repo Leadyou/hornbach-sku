@@ -8,84 +8,215 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <header class="head">
-      <h1>Dostępność SKU</h1>
-      <p class="sub">Sprawdzenie, czy pozycja jest dostępna w podanej ilości i na wybrany termin dostawy.</p>
-      <p class="meta">Rekordów w katalogu: <strong>{{ sku_count }}</strong></p>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-brand">
+        <h1 class="topbar-title">Dostępność SKU</h1>
+        <p class="topbar-meta">Pozycji w katalogu: <strong>{{ sku_count }}</strong></p>
+      </div>
+      <button type="button" class="btn-tab" id="btn-data" aria-expanded="false" aria-controls="data-drawer">
+        Data
+      </button>
     </header>
 
-    {% if import_notice %}
-    <section class="card notice">
-      <h2>Import CSV</h2>
-      <p>Zaktualizowano lub dodano: <strong>{{ import_notice.inserted }}</strong> pozycji.</p>
-      {% if import_notice.errors %}
-      <ul class="errs">
-        {% for e in import_notice.errors %}
-        <li>{{ e }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-    </section>
-    {% endif %}
-
-    {% if result %}
-    <section class="card result {% if result.ok %}ok{% else %}bad{% endif %}">
-      <h2>Wynik</h2>
-      <p class="msg">{{ result.message }}</p>
-      <dl class="grid">
-        <dt>SKU</dt><dd>{{ result.sku }}</dd>
-        <dt>Ilość</dt><dd>{{ result.quantity }}</dd>
-        <dt>Żądany termin dostawy</dt><dd>{{ result.requested_delivery_date }}</dd>
-        {% if result.stock_quantity is not none %}
-        <dt>Stan</dt><dd>{{ result.stock_quantity }}</dd>
-        {% endif %}
-        {% if result.lead_time_days is not none %}
-        <dt>Czas realizacji</dt><dd>{{ result.lead_time_days }} dni (kalendarzowo)</dd>
-        {% endif %}
-        {% if result.earliest_feasible_date %}
-        <dt>Najwcześniejsza data</dt><dd>{{ result.earliest_feasible_date }}</dd>
-        {% endif %}
-      </dl>
-      <p class="back"><a href="/">Sprawdź kolejny</a></p>
-    </section>
-    {% endif %}
-
-    <section class="card">
-      <h2>Sprawdź dostępność</h2>
-      <form class="form" method="post" action="/check">
-        <label>
-          SKU
-          <input name="sku" required autocomplete="off" placeholder="np. 4012345678901" />
+    <section class="card card-main">
+      <p class="lead">Wpisz numer SKU i oczekiwaną ilość — raport pojawi się automatycznie poniżej.</p>
+      <div class="fields-row">
+        <label class="field">
+          <span class="field-label">Numer SKU</span>
+          <input id="inp-sku" type="text" inputmode="numeric" autocomplete="off" placeholder="np. 4012345678901" />
         </label>
-        <label>
-          Ilość
-          <input name="quantity" type="number" min="1" required value="1" />
+        <label class="field field-narrow">
+          <span class="field-label">Ilość</span>
+          <input id="inp-qty" type="number" min="1" step="1" value="1" />
         </label>
-        <label>
-          Termin dostawy (data)
-          <input name="requested_delivery_date" type="date" required />
-        </label>
-        <label>
-          Kod miejsca dostawy <span class="hint">(opcjonalnie, jeśli SKU jest przypisane do lokalizacji)</span>
-          <input name="delivery_location_code" autocomplete="off" placeholder="np. WH-PL-01" />
-        </label>
-        <button type="submit">Sprawdź</button>
-      </form>
+      </div>
+      <p class="hint hint-muted" id="analyze-status"></p>
     </section>
 
-    <section class="card">
-      <h2>Import katalogu (CSV)</h2>
-      <p class="hint">Kolumny: <code>sku,name,stock_quantity,lead_time_days,available_from,delivery_location_code</code></p>
-      <p class="hint"><code>available_from</code> — opcjonalnie, format <code>YYYY-MM-DD</code>. Puste pole lokalizacji = dowolna przy sprawdzaniu.</p>
-      <form class="form inline" method="post" action="/import" enctype="multipart/form-data">
-        <label class="file">
-          Plik CSV
-          <input name="file" type="file" accept=".csv,text/csv" required />
-        </label>
-        <button type="submit">Importuj</button>
-      </form>
-    </section>
-  </main>
+    <section id="report" class="report-wrap" hidden aria-live="polite"></section>
+  </div>
+
+  <div id="data-drawer" class="drawer" hidden>
+    <div class="drawer-backdrop" id="drawer-backdrop" tabindex="-1"></div>
+    <aside class="drawer-panel" id="drawer-panel" role="dialog" aria-labelledby="drawer-title">
+      <div class="drawer-head">
+        <h2 id="drawer-title">Data</h2>
+        <button type="button" class="btn-close" id="btn-close-drawer" aria-label="Zamknij">×</button>
+      </div>
+      <div class="drawer-body">
+        <p class="hint">Importuj plik CSV z katalogiem SKU. Kolumny:</p>
+        <p class="hint mono-hint"><code>sku,name,stock_quantity,lead_time_days,available_from,delivery_location_code</code></p>
+        <form id="form-import" class="form-import">
+          <label class="file-label">
+            <span class="field-label">Plik CSV</span>
+            <input id="inp-file" name="file" type="file" accept=".csv,text/csv" required />
+          </label>
+          <button type="submit" class="btn-primary">Importuj</button>
+        </form>
+        <div id="import-result" class="import-result" hidden></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+(function () {
+  const sku = document.getElementById("inp-sku");
+  const qty = document.getElementById("inp-qty");
+  const report = document.getElementById("report");
+  const statusEl = document.getElementById("analyze-status");
+  const drawer = document.getElementById("data-drawer");
+  const btnData = document.getElementById("btn-data");
+  const btnClose = document.getElementById("btn-close-drawer");
+  const backdrop = document.getElementById("drawer-backdrop");
+  const formImport = document.getElementById("form-import");
+  const importResult = document.getElementById("import-result");
+  let timer = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  }
+
+  function renderReport(data) {
+    if (!data.ok && data.code === "empty_sku") {
+      report.hidden = true;
+      report.innerHTML = "";
+      return;
+    }
+    if (!data.ok) {
+      report.innerHTML =
+        '<div class="report-card bad"><h2 class="report-title">Raport</h2><p class="report-summary">' +
+        esc(data.message || "Nie udało się przygotować raportu.") +
+        "</p></div>";
+      report.hidden = false;
+      return;
+    }
+    const stockOk = data.quantity_feasible === true;
+    const cardClass = stockOk ? "report-card ok" : "report-card warn";
+
+    let rows = "";
+    if (data.name != null) {
+      rows += "<dt>Nazwa</dt><dd>" + esc(data.name) + "</dd>";
+    }
+    rows += "<dt>SKU</dt><dd>" + esc(data.sku || "") + "</dd>";
+    if (data.quantity_requested != null) {
+      rows += "<dt>Żądana ilość</dt><dd>" + esc(String(data.quantity_requested)) + " szt.</dd>";
+    }
+    if (data.stock_quantity != null) {
+      rows += "<dt>Stan magazynowy</dt><dd>" + esc(String(data.stock_quantity)) + " szt.</dd>";
+    }
+    if (data.lead_time_days != null) {
+      rows += "<dt>Czas realizacji</dt><dd>" + esc(String(data.lead_time_days)) + " dni kalendarzowych</dd>";
+    }
+    if (data.available_from) {
+      rows += "<dt>Dostępność od</dt><dd>" + esc(data.available_from) + "</dd>";
+    }
+    if (data.earliest_feasible_date) {
+      rows += "<dt>Najwcześniejsza dostawa</dt><dd>" + esc(data.earliest_feasible_date) + "</dd>";
+    }
+    if (data.delivery_location_code) {
+      rows += "<dt>Lokalizacja (katalog)</dt><dd>" + esc(data.delivery_location_code) + "</dd>";
+    }
+
+    report.innerHTML =
+      '<div class="' + cardClass + '">' +
+        '<h2 class="report-title">Raport dostępności</h2>' +
+        '<p class="report-summary">' + esc(data.message || "") + "</p>" +
+        "<dl class=\"report-grid\">" + rows + "</dl>" +
+      "</div>";
+    report.hidden = false;
+  }
+
+  async function runAnalyze() {
+    const s = (sku.value || "").trim();
+    const q = parseInt(String(qty.value || "1"), 10);
+    statusEl.textContent = "";
+    if (!s) {
+      report.hidden = true;
+      report.innerHTML = "";
+      return;
+    }
+    if (!Number.isFinite(q) || q < 1) {
+      statusEl.textContent = "Podaj poprawną ilość (co najmniej 1).";
+      return;
+    }
+    statusEl.textContent = "Analizowanie…";
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: s, quantity: q }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = data.message || "Błąd serwera.";
+        report.hidden = true;
+        return;
+      }
+      statusEl.textContent = "";
+      renderReport(data);
+    } catch (e) {
+      statusEl.textContent = "Brak połączenia z serwerem.";
+      report.hidden = true;
+    }
+  }
+
+  function scheduleAnalyze() {
+    clearTimeout(timer);
+    timer = setTimeout(runAnalyze, 450);
+  }
+
+  sku.addEventListener("input", scheduleAnalyze);
+  qty.addEventListener("input", scheduleAnalyze);
+
+  function openDrawer() {
+    drawer.hidden = false;
+    btnData.setAttribute("aria-expanded", "true");
+    document.body.classList.add("drawer-open");
+  }
+  function closeDrawer() {
+    drawer.hidden = true;
+    btnData.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("drawer-open");
+  }
+  btnData.addEventListener("click", openDrawer);
+  btnClose.addEventListener("click", closeDrawer);
+  backdrop.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !drawer.hidden) closeDrawer();
+  });
+
+  formImport.addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    const fd = new FormData();
+    const f = document.getElementById("inp-file").files[0];
+    if (!f) return;
+    fd.append("file", f);
+    importResult.hidden = true;
+    try {
+      const res = await fetch("/api/import", { method: "POST", body: fd });
+      const data = await res.json();
+      let html = "";
+      if (data.ok) {
+        html = "<p class=\"import-ok\">Zaimportowano lub zaktualizowano: <strong>" + data.inserted + "</strong> pozycji.</p>";
+        if (data.errors && data.errors.length) {
+          html += "<ul class=\"import-errs\">" + data.errors.map(function (e) { return "<li>" + esc(e) + "</li>"; }).join("") + "</ul>";
+        }
+      } else {
+        html = "<p class=\"import-bad\">" + esc(data.message || "Import nie powiódł się.") + "</p>";
+      }
+      importResult.innerHTML = html;
+      importResult.hidden = false;
+      if (data.ok) {
+        formImport.reset();
+        location.reload();
+      }
+    } catch (e) {
+      importResult.innerHTML = "<p class=\"import-bad\">Brak połączenia z serwerem.</p>";
+      importResult.hidden = false;
+    }
+  });
+})();
+  </script>
 </body>
 </html>
