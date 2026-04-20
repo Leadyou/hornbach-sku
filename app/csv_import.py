@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Tuple
+from typing import Any, Tuple
 
-from app.db import get_conn
+from app.db import upsert_sku_rows
 
 EXPECTED_HEADERS = (
     "sku",
@@ -25,7 +25,7 @@ def import_skus_csv(content: str) -> Tuple[int, list[str]]:
     delivery_location_code: opcjonalne; puste = dowolna lokalizacja przy sprawdzaniu
     """
     errors: list[str] = []
-    rows: list[tuple] = []
+    rows: list[dict[str, Any]] = []
 
     reader = csv.DictReader(io.StringIO(content))
     if reader.fieldnames is None:
@@ -50,28 +50,24 @@ def import_skus_csv(content: str) -> Tuple[int, list[str]]:
             continue
 
         name = line.get("name", "")
-        available_from = line.get("available_from", "") or None
-        delivery_location_code = line.get("delivery_location_code", "") or ""
+        available_raw = (line.get("available_from", "") or "").strip()
+        available_from: str | None = available_raw if available_raw else None
+        delivery_location_code = (line.get("delivery_location_code", "") or "").strip()
 
-        rows.append((sku, name, stock, lead, available_from, delivery_location_code))
+        rows.append(
+            {
+                "sku": sku,
+                "name": name,
+                "stock_quantity": stock,
+                "lead_time_days": lead,
+                "available_from": available_from,
+                "delivery_location_code": delivery_location_code,
+            }
+        )
 
     if not rows and not errors:
         return 0, ["Brak danych do importu."]
 
-    with get_conn() as conn:
-        conn.executemany(
-            """
-            INSERT INTO sku_item (sku, name, stock_quantity, lead_time_days, available_from, delivery_location_code)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(sku) DO UPDATE SET
-                name = excluded.name,
-                stock_quantity = excluded.stock_quantity,
-                lead_time_days = excluded.lead_time_days,
-                available_from = excluded.available_from,
-                delivery_location_code = excluded.delivery_location_code
-            """,
-            rows,
-        )
-        conn.commit()
+    upsert_sku_rows(rows)
 
     return len(rows), errors

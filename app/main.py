@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,14 +10,15 @@ from fastapi.templating import Jinja2Templates
 
 from app.availability import check_availability
 from app.csv_import import import_skus_csv
-from app.db import get_conn, init_db
+from app.db import count_skus, get_supabase
 
 BASE_DIR = Path(__file__).resolve().parent
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    load_dotenv()
+    get_supabase()
     yield
 
 
@@ -27,8 +29,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    with get_conn() as conn:
-        count = conn.execute("SELECT COUNT(*) AS c FROM sku_item").fetchone()["c"]
+    count = count_skus()
     return templates.TemplateResponse(
         "index.html",
         {"request": request, "result": None, "import_notice": None, "sku_count": count},
@@ -44,8 +45,7 @@ def check(
     delivery_location_code: str = Form(""),
 ):
     result = check_availability(sku, quantity, requested_delivery_date, delivery_location_code)
-    with get_conn() as conn:
-        count = conn.execute("SELECT COUNT(*) AS c FROM sku_item").fetchone()["c"]
+    count = count_skus()
     return templates.TemplateResponse(
         "index.html",
         {"request": request, "result": result, "import_notice": None, "sku_count": count},
@@ -57,8 +57,7 @@ async def import_csv(request: Request, file: UploadFile = File(...)):
     raw = (await file.read()).decode("utf-8-sig")
     inserted, errs = import_skus_csv(raw)
     notice = {"inserted": inserted, "errors": errs}
-    with get_conn() as conn:
-        count = conn.execute("SELECT COUNT(*) AS c FROM sku_item").fetchone()["c"]
+    count = count_skus()
     return templates.TemplateResponse(
         "index.html",
         {"request": request, "result": None, "import_notice": notice, "sku_count": count},

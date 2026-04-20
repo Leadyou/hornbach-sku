@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
-from typing import Optional
+from datetime import date, datetime, timedelta
+from typing import Any, Optional
 
-from app.db import get_conn
+from app.db import fetch_sku
 
 
 @dataclass
@@ -21,6 +21,24 @@ class CheckResult:
 
 def _parse_date(s: str) -> date:
     return date.fromisoformat(s.strip())
+
+
+def _coerce_available_from(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if type(value) is date:
+        return value
+    if isinstance(value, str):
+        t = value.strip()
+        if not t:
+            return None
+        try:
+            return _parse_date(t[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def check_availability(
@@ -49,15 +67,7 @@ def check_availability(
 
     loc = (delivery_location_code or "").strip()
 
-    with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT sku, name, stock_quantity, lead_time_days, available_from, delivery_location_code
-            FROM sku_item
-            WHERE sku = ?
-            """,
-            (sku,),
-        ).fetchone()
+    row = fetch_sku(sku)
 
     if row is None:
         return CheckResult(
@@ -68,7 +78,7 @@ def check_availability(
             requested_delivery_date=requested_delivery_date,
         )
 
-    row_loc = (row["delivery_location_code"] or "").strip()
+    row_loc = (row.get("delivery_location_code") or "").strip()
     if row_loc and loc and row_loc != loc:
         return CheckResult(
             ok=False,
@@ -76,20 +86,15 @@ def check_availability(
             sku=sku,
             quantity=quantity,
             requested_delivery_date=requested_delivery_date,
-            stock_quantity=row["stock_quantity"],
-            lead_time_days=row["lead_time_days"],
+            stock_quantity=int(row["stock_quantity"]),
+            lead_time_days=int(row["lead_time_days"]),
         )
 
     stock = int(row["stock_quantity"])
     lead = int(row["lead_time_days"])
     today = date.today()
 
-    available_from: Optional[date] = None
-    if row["available_from"]:
-        try:
-            available_from = _parse_date(row["available_from"])
-        except ValueError:
-            available_from = None
+    available_from = _coerce_available_from(row.get("available_from"))
 
     earliest = today + timedelta(days=lead)
     if available_from is not None and available_from > earliest:

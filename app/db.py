@@ -1,32 +1,44 @@
-import sqlite3
-from contextlib import contextmanager
-from pathlib import Path
+from __future__ import annotations
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "availability.db"
+from typing import Any, Optional
 
+from supabase import Client, create_client
 
-def init_db() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS sku_item (
-                sku TEXT PRIMARY KEY,
-                name TEXT NOT NULL DEFAULT '',
-                stock_quantity INTEGER NOT NULL DEFAULT 0,
-                lead_time_days INTEGER NOT NULL DEFAULT 0,
-                available_from TEXT,
-                delivery_location_code TEXT DEFAULT ''
-            )
-        """)
-        conn.commit()
+from app.config import supabase_service_role_key, supabase_url
+
+_client: Optional[Client] = None
 
 
-@contextmanager
-def get_conn():
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+def get_supabase() -> Client:
+    global _client
+    if _client is None:
+        _client = create_client(supabase_url(), supabase_service_role_key())
+    return _client
+
+
+def count_skus() -> int:
+    sb = get_supabase()
+    r = sb.table("sku_item").select("sku", count="exact", head=True).execute()
+    return int(r.count) if r.count is not None else 0
+
+
+def fetch_sku(sku: str) -> Optional[dict[str, Any]]:
+    sb = get_supabase()
+    r = (
+        sb.table("sku_item")
+        .select("sku, name, stock_quantity, lead_time_days, available_from, delivery_location_code")
+        .eq("sku", sku)
+        .limit(1)
+        .execute()
+    )
+    rows = r.data or []
+    return rows[0] if rows else None
+
+
+def upsert_sku_rows(rows: list[dict[str, Any]], chunk_size: int = 200) -> None:
+    if not rows:
+        return
+    sb = get_supabase()
+    for i in range(0, len(rows), chunk_size):
+        chunk = rows[i : i + chunk_size]
+        sb.table("sku_item").upsert(chunk, on_conflict="sku").execute()
