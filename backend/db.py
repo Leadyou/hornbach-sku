@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
-from supabase import Client, create_client
+from typing import TYPE_CHECKING, Any, Optional
 
 from backend.config import supabase_service_role_key, supabase_url
 
-_client: Optional[Client] = None
+if TYPE_CHECKING:
+    from supabase import Client
+
+_client: Optional["Client"] = None
 
 
-def get_supabase() -> Client:
+def get_supabase() -> "Client":
     global _client
     if _client is None:
+        from supabase import create_client
+
         _client = create_client(supabase_url(), supabase_service_role_key())
     return _client
 

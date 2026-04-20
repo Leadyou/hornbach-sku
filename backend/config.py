@@ -1,8 +1,6 @@
 import os
-from functools import lru_cache
 
 
-@lru_cache
 def supabase_url() -> str:
     v = (os.getenv("SUPABASE_URL") or "").strip()
     if not v:
@@ -10,7 +8,6 @@ def supabase_url() -> str:
     return v.rstrip("/")
 
 
-@lru_cache
 def supabase_service_role_key() -> str:
     v = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
     if not v:
