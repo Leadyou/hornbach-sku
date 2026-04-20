@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from supabase import Client, create_client
 
-from app.config import supabase_service_role_key, supabase_url
+from backend.config import supabase_service_role_key, supabase_url
 
 _client: Optional[Client] = None
 

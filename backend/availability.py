@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
-from app.db import fetch_sku
+from backend.db import fetch_sku
 
 
 @dataclass

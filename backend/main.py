@@ -11,9 +11,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.availability import check_availability
-from app.csv_import import import_skus_csv
-from app.db import count_skus, get_supabase
+from backend.availability import check_availability
+from backend.csv_import import import_skus_csv
+from backend.db import count_skus, get_supabase
 
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
@@ -26,8 +26,8 @@ async def lifespan(app: FastAPI):
     app.state.supabase_config_error = None
     try:
         get_supabase()
-    except RuntimeError as e:
-        app.state.supabase_config_error = str(e)
+    except Exception as e:
+        app.state.supabase_config_error = f"{type(e).__name__}: {e}"
     yield
 
 

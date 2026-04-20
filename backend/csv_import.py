@@ -4,7 +4,7 @@ import csv
 import io
 from typing import Any, Tuple
 
-from app.db import upsert_sku_rows
+from backend.db import upsert_sku_rows
 
 EXPECTED_HEADERS = (
     "sku",
