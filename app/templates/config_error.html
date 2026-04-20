@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Konfiguracja Supabase</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <h1>Brak połączenia z bazą</h1>
+      <p class="sub">Aplikacja nie ma poprawnej konfiguracji Supabase albo zmienne nie zostały wczytane po deployu.</p>
+    </header>
+    <section class="card result bad">
+      <p class="msg">{{ message }}</p>
+      <p class="sub"><strong>Na Vercelu:</strong> Project → <strong>Settings</strong> → <strong>Environment Variables</strong> — dodaj dokładnie:</p>
+      <ul class="errs">
+        <li><code>SUPABASE_URL</code> (Project URL z Supabase)</li>
+        <li><code>SUPABASE_SERVICE_ROLE_KEY</code> (klucz <em>service_role</em>, nie anon)</li>
+      </ul>
+      <p class="sub">Zapisz zmienne, potem <strong>Deployments</strong> → ostatni deploy → <strong>⋯</strong> → <strong>Redeploy</strong>.</p>
+    </section>
+  </main>
+</body>
+</html>

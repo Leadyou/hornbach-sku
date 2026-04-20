@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -20,7 +23,11 @@ PUBLIC_STATIC = ROOT_DIR / "public" / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_dotenv(ROOT_DIR / ".env")
-    get_supabase()
+    app.state.supabase_config_error = None
+    try:
+        get_supabase()
+    except RuntimeError as e:
+        app.state.supabase_config_error = str(e)
     yield
 
 
@@ -30,8 +37,27 @@ if PUBLIC_STATIC.is_dir():
     app.mount("/static", StaticFiles(directory=str(PUBLIC_STATIC)), name="static")
 
 
+def _config_error_response(request: Request) -> Optional[HTMLResponse]:
+    err = getattr(request.app.state, "supabase_config_error", None)
+    if err:
+        return templates.TemplateResponse(
+            "config_error.html",
+            {"request": request, "message": err},
+            status_code=503,
+        )
+    return None
+
+
+@app.get("/health")
+def health():
+    return JSONResponse({"status": "ok"})
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
+    bad = _config_error_response(request)
+    if bad:
+        return bad
     count = count_skus()
     return templates.TemplateResponse(
         "index.html",
@@ -47,6 +73,9 @@ def check(
     requested_delivery_date: date = Form(...),
     delivery_location_code: str = Form(""),
 ):
+    bad = _config_error_response(request)
+    if bad:
+        return bad
     result = check_availability(sku, quantity, requested_delivery_date, delivery_location_code)
     count = count_skus()
     return templates.TemplateResponse(
@@ -57,6 +86,9 @@ def check(
 
 @app.post("/import", response_class=HTMLResponse)
 async def import_csv(request: Request, file: UploadFile = File(...)):
+    bad = _config_error_response(request)
+    if bad:
+        return bad
     raw = (await file.read()).decode("utf-8-sig")
     inserted, errs = import_skus_csv(raw)
     notice = {"inserted": inserted, "errors": errs}
