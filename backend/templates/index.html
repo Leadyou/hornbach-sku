@@ -102,12 +102,7 @@
             <code>SCRAPER_PIN</code> (min. {{ scraper_pin_min_len }} znaków) i/lub <code>SCRAPER_TOKEN</code>.
           </p>
           {% endif %}
-          <label class="field">
-            <span class="field-label">Adres URL</span>
-            <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
-          </label>
           <div class="scraper-actions">
-            <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
             <label class="inline-limit">
               <span class="field-label">Ile sklepów</span>
               <input id="scraper-limit" type="number" min="1" max="500" value="15" />
@@ -379,7 +374,6 @@
     }
   });
 
-  const urlIn = document.getElementById("scraper-url");
   const lim = document.getElementById("scraper-limit");
   const out = document.getElementById("scrape-out");
   const marketsWrap = document.getElementById("scrape-markets-wrap");
@@ -513,37 +507,6 @@
     showPinError((data && data.message) || "Sesja odrzucona — wpisz PIN ponownie.");
     return true;
   }
-
-  document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
-    const url = (urlIn.value || "").trim();
-    if (scraperTokenRequired) {
-      const t = (tok && tok.value ? tok.value : "").trim();
-      if (!t) {
-        setObiUnlocked(false);
-        syncObiSteps();
-        showPinError("Wpisz PIN na pierwszym kroku.");
-        return;
-      }
-    }
-    out.hidden = true;
-    try {
-      const res = await fetch("/api/scrape/preview", {
-        method: "POST",
-        headers: scrapeHeaders(),
-        body: JSON.stringify({ url: url }),
-      });
-      const data = await res.json().catch(function () {
-        return {};
-      });
-      if (handleScrapeForbidden(res, data)) {
-        showScrape(data);
-        return;
-      }
-      showScrape(data);
-    } catch (e) {
-      showScrape({ ok: false, message: String(e) });
-    }
-  });
 
   document.getElementById("btn-scrape-markets").addEventListener("click", async function () {
     const n = parseInt(String(lim.value || "15"), 10);
