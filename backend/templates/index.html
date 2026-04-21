@@ -114,6 +114,20 @@
             </label>
             <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
           </div>
+          <div id="scrape-markets-wrap" class="scrape-markets-wrap" hidden>
+            <p id="scrape-markets-meta" class="hint scrape-markets-meta" hidden></p>
+            <div class="scrape-table-scroll">
+              <table class="obi-markets-table" aria-label="Lista sklepów OBI">
+                <thead>
+                  <tr>
+                    <th scope="col">Sklep i adres</th>
+                    <th scope="col">Kod pocztowy (szac.)</th>
+                  </tr>
+                </thead>
+                <tbody id="scrape-markets-tbody"></tbody>
+              </table>
+            </div>
+          </div>
           <pre id="scrape-out" class="scrape-out" hidden></pre>
         </div>
       </div>
@@ -217,6 +231,9 @@
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  }
+  function escAttr(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   }
 
   function renderReport(data) {
@@ -365,6 +382,9 @@
   const urlIn = document.getElementById("scraper-url");
   const lim = document.getElementById("scraper-limit");
   const out = document.getElementById("scrape-out");
+  const marketsWrap = document.getElementById("scrape-markets-wrap");
+  const marketsTbody = document.getElementById("scrape-markets-tbody");
+  const marketsMeta = document.getElementById("scrape-markets-meta");
   const LS_TOKEN = "hornbach_scraper_pin";
   if (scraperTokenRequired && tok) {
     try {
@@ -437,6 +457,43 @@
   }
 
   function showScrape(obj) {
+    if (
+      obj &&
+      obj.ok === true &&
+      Array.isArray(obj.rows) &&
+      obj.rows.length &&
+      marketsWrap &&
+      marketsTbody
+    ) {
+      out.hidden = true;
+      marketsWrap.hidden = false;
+      var html = "";
+      for (var i = 0; i < obj.rows.length; i++) {
+        var r = obj.rows[i];
+        var title = esc(r.title || "");
+        var plz = esc(r.postal_code_guess || "");
+        var u = r.url ? String(r.url) : "";
+        var cellStore =
+          u.indexOf("http") === 0
+            ? '<a href="' + escAttr(u) + '" target="_blank" rel="noopener noreferrer">' + title + "</a>"
+            : title;
+        html += '<tr><td class="obi-col-store">' + cellStore + '</td><td class="obi-col-plz">' + plz + "</td></tr>";
+      }
+      marketsTbody.innerHTML = html;
+      if (marketsMeta) {
+        var parts = ["Wierszy: " + obj.rows.length];
+        if (obj.slug_total != null) parts.push("w katalogu ok. " + obj.slug_total + " sklepów");
+        parts.push("kod pocztowy z heurystyki HTML");
+        marketsMeta.textContent = parts.join(" · ") + ".";
+        marketsMeta.hidden = false;
+      }
+      return;
+    }
+    if (marketsWrap) marketsWrap.hidden = true;
+    if (marketsMeta) {
+      marketsMeta.hidden = true;
+      marketsMeta.textContent = "";
+    }
     out.textContent = JSON.stringify(obj, null, 2);
     out.hidden = false;
   }

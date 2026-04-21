@@ -439,6 +439,70 @@ input[type="password"].scraper-pin-invalid:focus {
   width: 5rem;
 }
 
+.scrape-markets-wrap {
+  margin-top: 1rem;
+}
+
+.scrape-markets-meta {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.scrape-table-scroll {
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0a0e12;
+}
+
+.obi-markets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.obi-markets-table th,
+.obi-markets-table td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.obi-markets-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #121920;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.obi-markets-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.obi-markets-table a {
+  color: #8ecfff;
+  text-decoration: underline;
+}
+
+.obi-markets-table a:hover {
+  color: #b8e0ff;
+}
+
+.obi-col-plz {
+  white-space: nowrap;
+  width: 1%;
+  font-variant-numeric: tabular-nums;
+  color: #c5d4e0;
+}
+
 .scrape-out {
   margin-top: 1rem;
   padding: 0.85rem;
