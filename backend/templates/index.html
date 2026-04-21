@@ -72,39 +72,50 @@
         <button type="button" class="btn-close" id="btn-close-obi" aria-label="Zamknij">×</button>
       </div>
       <div class="drawer-body">
-        <p class="hint">
-          Serwer może pobrać stronę tylko z hostów w <code>SCRAPE_ALLOWED_HOSTS</code> (domyślnie <code>obi.de</code>).
-        </p>
         {% if scraper_token_required %}
-        <p class="hint">
-          Na serwerze włączono <code>SCRAPER_REQUIRE_TOKEN</code>. Wpisz <strong>hasło zespołu</strong> — to samo co
-          <code>SCRAPER_PIN</code> na serwerze (min. {{ scraper_pin_min_len }} znaków; tylko Ty je ustawiasz w Vercelu, nie wysyłasz długiego tokenu do ludzi).
-          Opcjonalnie na serwerze może być też <code>SCRAPER_TOKEN</code> (długi sekret); wtedy w tym polu możesz wpisać albo PIN, albo ten token (np. dla skryptów).
-          Zapis w tej przeglądarce (<code>localStorage</code>).
-        </p>
-        <label class="field">
-          <span class="field-label">Hasło skrapera (jak SCRAPER_PIN)</span>
-          <input id="scraper-token" type="password" autocomplete="off" placeholder="min. {{ scraper_pin_min_len }} znaków — jak na serwerze" />
-        </label>
-        {% else %}
-        <p class="hint">
-          Ochrona skrapera wyłączona. Aby włączyć: <code>SCRAPER_REQUIRE_TOKEN=1</code> oraz na serwerze
-          <code>SCRAPER_PIN</code> (hasło dla zespołu, min. {{ scraper_pin_min_len }} znaków) i/lub <code>SCRAPER_TOKEN</code> (długi sekret).
-        </p>
-        {% endif %}
-        <label class="field">
-          <span class="field-label">Adres URL</span>
-          <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
-        </label>
-        <div class="scraper-actions">
-          <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
-          <label class="inline-limit">
-            <span class="field-label">Ile sklepów</span>
-            <input id="scraper-limit" type="number" min="1" max="500" value="15" />
+        <div id="obi-step-pin" class="obi-flow-step">
+          <p class="hint">Podaj PIN skrapera (to samo co <code>SCRAPER_PIN</code> na serwerze, min. {{ scraper_pin_min_len }} znaków). Po weryfikacji zobaczysz narzędzia.</p>
+          <p class="hint hint-muted">Opcjonalnie zamiast PIN możesz wpisać długi <code>SCRAPER_TOKEN</code>, jeśli jest ustawiony na serwerze.</p>
+          <label class="field">
+            <span class="field-label">PIN skrapera</span>
+            <input id="scraper-token" type="password" autocomplete="current-password" placeholder="min. {{ scraper_pin_min_len }} znaków" />
           </label>
-          <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
+          <div class="obi-pin-actions">
+            <button type="button" class="btn-primary" id="btn-obi-pin-continue">Dalej</button>
+          </div>
+          <p id="obi-pin-feedback" class="obi-pin-feedback" hidden role="alert"></p>
         </div>
-        <pre id="scrape-out" class="scrape-out" hidden></pre>
+        {% endif %}
+        <div id="obi-step-main" class="obi-flow-step" {% if scraper_token_required %}hidden{% endif %}>
+          {% if scraper_token_required %}
+          <p class="hint hint-obi-unlocked">
+            PIN zweryfikowany.
+            <button type="button" class="btn-link" id="btn-obi-change-pin">Zmień PIN</button>
+          </p>
+          {% endif %}
+          <p class="hint">
+            Serwer może pobrać stronę tylko z hostów w <code>SCRAPE_ALLOWED_HOSTS</code> (domyślnie <code>obi.de</code>).
+          </p>
+          {% if not scraper_token_required %}
+          <p class="hint">
+            Ochrona skrapera wyłączona. Aby włączyć: <code>SCRAPER_REQUIRE_TOKEN=1</code> oraz na serwerze
+            <code>SCRAPER_PIN</code> (min. {{ scraper_pin_min_len }} znaków) i/lub <code>SCRAPER_TOKEN</code>.
+          </p>
+          {% endif %}
+          <label class="field">
+            <span class="field-label">Adres URL</span>
+            <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
+          </label>
+          <div class="scraper-actions">
+            <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
+            <label class="inline-limit">
+              <span class="field-label">Ile sklepów</span>
+              <input id="scraper-limit" type="number" min="1" max="500" value="15" />
+            </label>
+            <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
+          </div>
+          <pre id="scrape-out" class="scrape-out" hidden></pre>
+        </div>
       </div>
     </aside>
   </div>
@@ -125,7 +136,51 @@
   const backdropObi = document.getElementById("obi-drawer-backdrop");
   const formImport = document.getElementById("form-import");
   const importResult = document.getElementById("import-result");
+  const scraperTokenRequired = obiDrawer.getAttribute("data-scraper-token-required") === "1";
+  const stepPin = document.getElementById("obi-step-pin");
+  const stepMain = document.getElementById("obi-step-main");
+  const pinFeedback = document.getElementById("obi-pin-feedback");
+  const tok = document.getElementById("scraper-token");
+  const SESSION_OBI = "hornbach_obi_unlocked";
   let timer = null;
+
+  function isObiUnlocked() {
+    try {
+      return sessionStorage.getItem(SESSION_OBI) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+  function setObiUnlocked(on) {
+    try {
+      if (on) sessionStorage.setItem(SESSION_OBI, "1");
+      else sessionStorage.removeItem(SESSION_OBI);
+    } catch (e) {}
+  }
+  function syncObiSteps() {
+    if (!scraperTokenRequired || !stepPin || !stepMain) return;
+    if (isObiUnlocked()) {
+      stepPin.hidden = true;
+      stepMain.hidden = false;
+    } else {
+      stepPin.hidden = false;
+      stepMain.hidden = true;
+    }
+  }
+  function clearPinInvalid() {
+    if (tok) tok.classList.remove("scraper-pin-invalid");
+    if (pinFeedback) {
+      pinFeedback.hidden = true;
+      pinFeedback.textContent = "";
+    }
+  }
+  function showPinError(msg) {
+    if (tok) tok.classList.add("scraper-pin-invalid");
+    if (pinFeedback) {
+      pinFeedback.textContent = msg || "Nieprawidłowy PIN.";
+      pinFeedback.hidden = false;
+    }
+  }
 
   function anyDrawerOpen() {
     return !dataDrawer.hidden || !obiDrawer.hidden;
@@ -155,6 +210,8 @@
     btnData.setAttribute("aria-expanded", "false");
     obiDrawer.hidden = false;
     btnObi.setAttribute("aria-expanded", "true");
+    syncObiSteps();
+    clearPinInvalid();
     syncBodyScroll();
   }
 
@@ -308,8 +365,6 @@
   const urlIn = document.getElementById("scraper-url");
   const lim = document.getElementById("scraper-limit");
   const out = document.getElementById("scrape-out");
-  const scraperTokenRequired = obiDrawer.getAttribute("data-scraper-token-required") === "1";
-  const tok = document.getElementById("scraper-token");
   const LS_TOKEN = "hornbach_scraper_pin";
   if (scraperTokenRequired && tok) {
     try {
@@ -320,8 +375,65 @@
         localStorage.setItem(LS_TOKEN, tok.value);
       } catch (e) {}
     }
-    tok.addEventListener("input", persistToken);
+    tok.addEventListener("input", function () {
+      clearPinInvalid();
+      persistToken();
+    });
     tok.addEventListener("change", persistToken);
+    tok.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        var b = document.getElementById("btn-obi-pin-continue");
+        if (b) b.click();
+      }
+    });
+  }
+
+  if (scraperTokenRequired && tok && document.getElementById("btn-obi-pin-continue")) {
+    document.getElementById("btn-obi-pin-continue").addEventListener("click", async function () {
+      var t = (tok.value || "").trim();
+      if (!t) {
+        showPinError("Wpisz PIN.");
+        return;
+      }
+      clearPinInvalid();
+      try {
+        var res = await fetch("/api/scrape/auth-check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Scraper-Token": t,
+          },
+          body: "{}",
+        });
+        var data = await res.json().catch(function () {
+          return {};
+        });
+        if (res.ok && data.ok) {
+          try {
+            localStorage.setItem(LS_TOKEN, t);
+          } catch (e) {}
+          setObiUnlocked(true);
+          syncObiSteps();
+          clearPinInvalid();
+        } else {
+          setObiUnlocked(false);
+          showPinError(data.message || "Nieprawidłowy PIN.");
+        }
+      } catch (e) {
+        showPinError("Brak połączenia z serwerem.");
+      }
+    });
+  }
+
+  var btnObiChangePin = document.getElementById("btn-obi-change-pin");
+  if (btnObiChangePin) {
+    btnObiChangePin.addEventListener("click", function () {
+      setObiUnlocked(false);
+      syncObiSteps();
+      clearPinInvalid();
+      if (tok) tok.focus();
+    });
   }
 
   function showScrape(obj) {
@@ -337,12 +449,22 @@
     return h;
   }
 
+  function handleScrapeForbidden(res, data) {
+    if (res.status !== 403 || !scraperTokenRequired) return false;
+    setObiUnlocked(false);
+    syncObiSteps();
+    showPinError((data && data.message) || "Sesja odrzucona — wpisz PIN ponownie.");
+    return true;
+  }
+
   document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
     const url = (urlIn.value || "").trim();
     if (scraperTokenRequired) {
       const t = (tok && tok.value ? tok.value : "").trim();
       if (!t) {
-        alert("Wymagany jest sekret skrapera (SCRAPER_REQUIRE_TOKEN=1 na serwerze).");
+        setObiUnlocked(false);
+        syncObiSteps();
+        showPinError("Wpisz PIN na pierwszym kroku.");
         return;
       }
     }
@@ -353,7 +475,13 @@
         headers: scrapeHeaders(),
         body: JSON.stringify({ url: url }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(function () {
+        return {};
+      });
+      if (handleScrapeForbidden(res, data)) {
+        showScrape(data);
+        return;
+      }
       showScrape(data);
     } catch (e) {
       showScrape({ ok: false, message: String(e) });
@@ -365,7 +493,9 @@
     if (scraperTokenRequired) {
       const t = (tok && tok.value ? tok.value : "").trim();
       if (!t) {
-        alert("Wymagany jest sekret skrapera (SCRAPER_REQUIRE_TOKEN=1 na serwerze).");
+        setObiUnlocked(false);
+        syncObiSteps();
+        showPinError("Wpisz PIN na pierwszym kroku.");
         return;
       }
     }
@@ -376,7 +506,13 @@
         headers: scrapeHeaders(),
         body: JSON.stringify({ limit: n, delay_sec: 0.35 }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(function () {
+        return {};
+      });
+      if (handleScrapeForbidden(res, data)) {
+        showScrape(data);
+        return;
+      }
       showScrape(data);
     } catch (e) {
       showScrape({ ok: false, message: String(e) });

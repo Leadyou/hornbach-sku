@@ -175,6 +175,16 @@ def _scrape_auth_error() -> JSONResponse:
     )
 
 
+@app.post("/api/scrape/auth-check")
+def api_scrape_auth_check(request: Request):
+    """Lekka weryfikacja PIN / tokena przed pokazaniem reszty UI (bez Supabase, bez pobierania OBI)."""
+    if not _scraper_token_required():
+        return JSONResponse({"ok": True, "token_required": False})
+    if not _scrape_authenticated(request):
+        return _scrape_auth_error()
+    return JSONResponse({"ok": True, "token_required": True})
+
+
 @app.post("/api/scrape/preview")
 def api_scrape_preview(request: Request, body: ScrapePreviewBody):
     if not _scrape_authenticated(request):

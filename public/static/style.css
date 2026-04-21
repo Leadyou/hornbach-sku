@@ -133,7 +133,9 @@ body.drawer-open {
 
 input[type="text"],
 input[type="number"],
-input[type="file"] {
+input[type="file"],
+input[type="password"],
+input[type="url"] {
   padding: 0.65rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -145,6 +147,47 @@ input[type="file"] {
 input:focus {
   outline: 2px solid var(--accent-dim);
   outline-offset: 1px;
+}
+
+input[type="password"].scraper-pin-invalid {
+  border-color: #9a2e2e;
+  background: rgba(201, 76, 76, 0.14);
+}
+
+input[type="password"].scraper-pin-invalid:focus {
+  outline: 2px solid var(--bad);
+  outline-offset: 1px;
+}
+
+.obi-pin-actions {
+  margin-top: 1rem;
+}
+
+.obi-pin-feedback {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+  color: #f0a8a8;
+}
+
+.btn-link {
+  margin: 0 0 0 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.btn-link:hover {
+  color: var(--accent-hover);
+}
+
+.hint-obi-unlocked {
+  margin-top: 0;
+  color: #7dd4a8;
 }
 
 .hint {
