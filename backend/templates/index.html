@@ -64,7 +64,7 @@
     </aside>
   </div>
 
-  <div id="obi-drawer" class="drawer" hidden>
+  <div id="obi-drawer" class="drawer" hidden data-scraper-token-required="{% if scraper_token_required %}1{% else %}0{% endif %}">
     <div class="drawer-backdrop" id="obi-drawer-backdrop" tabindex="-1"></div>
     <aside class="drawer-panel" id="obi-drawer-panel" role="dialog" aria-labelledby="obi-drawer-title">
       <div class="drawer-head">
@@ -73,14 +73,25 @@
       </div>
       <div class="drawer-body">
         <p class="hint">
-          <strong>Sekret (token)</strong> — wpisz raz; zapisujemy go w tej przeglądarce (<code>localStorage</code>).
-          Na serwerze <em>nie musisz</em> mieć <code>SCRAPER_TOKEN</code>: wtedy wystarczy sekret o długości co najmniej <strong>24 znaki</strong>.
-          Jeśli ustawisz <code>SCRAPER_TOKEN</code> na Vercelu — wpisz tutaj <strong>dokładnie tę samą</strong> wartość.
+          Serwer może pobrać stronę tylko z hostów w <code>SCRAPE_ALLOWED_HOSTS</code> (domyślnie <code>obi.de</code>).
+        </p>
+        {% if scraper_token_required %}
+        <p class="hint">
+          Na serwerze włączono <code>SCRAPER_REQUIRE_TOKEN</code>. Wpisz <strong>hasło zespołu</strong> — to samo co
+          <code>SCRAPER_PIN</code> na serwerze (min. {{ scraper_pin_min_len }} znaków; tylko Ty je ustawiasz w Vercelu, nie wysyłasz długiego tokenu do ludzi).
+          Opcjonalnie na serwerze może być też <code>SCRAPER_TOKEN</code> (długi sekret); wtedy w tym polu możesz wpisać albo PIN, albo ten token (np. dla skryptów).
+          Zapis w tej przeglądarce (<code>localStorage</code>).
         </p>
         <label class="field">
-          <span class="field-label">Sekret / wartość tokena</span>
-          <input id="scraper-token" type="password" autocomplete="off" placeholder="min. 24 znaków (lub = SCRAPER_TOKEN z serwera)" />
+          <span class="field-label">Hasło skrapera (jak SCRAPER_PIN)</span>
+          <input id="scraper-token" type="password" autocomplete="off" placeholder="min. {{ scraper_pin_min_len }} znaków — jak na serwerze" />
         </label>
+        {% else %}
+        <p class="hint">
+          Ochrona skrapera wyłączona. Aby włączyć: <code>SCRAPER_REQUIRE_TOKEN=1</code> oraz na serwerze
+          <code>SCRAPER_PIN</code> (hasło dla zespołu, min. {{ scraper_pin_min_len }} znaków) i/lub <code>SCRAPER_TOKEN</code> (długi sekret).
+        </p>
+        {% endif %}
         <label class="field">
           <span class="field-label">Adres URL</span>
           <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
@@ -294,46 +305,52 @@
     }
   });
 
-  const tok = document.getElementById("scraper-token");
   const urlIn = document.getElementById("scraper-url");
   const lim = document.getElementById("scraper-limit");
   const out = document.getElementById("scrape-out");
-  const LS_TOKEN = "hornbach_scraper_token";
-  try {
-    tok.value = localStorage.getItem(LS_TOKEN) || "";
-  } catch (e) {}
-  function persistToken() {
+  const scraperTokenRequired = obiDrawer.getAttribute("data-scraper-token-required") === "1";
+  const tok = document.getElementById("scraper-token");
+  const LS_TOKEN = "hornbach_scraper_pin";
+  if (scraperTokenRequired && tok) {
     try {
-      localStorage.setItem(LS_TOKEN, tok.value);
+      tok.value = localStorage.getItem(LS_TOKEN) || "";
     } catch (e) {}
+    function persistToken() {
+      try {
+        localStorage.setItem(LS_TOKEN, tok.value);
+      } catch (e) {}
+    }
+    tok.addEventListener("input", persistToken);
+    tok.addEventListener("change", persistToken);
   }
-  tok.addEventListener("input", persistToken);
-  tok.addEventListener("change", persistToken);
 
   function showScrape(obj) {
     out.textContent = JSON.stringify(obj, null, 2);
     out.hidden = false;
   }
 
-  function tokenNonEmpty(t) {
-    return (t || "").trim().length > 0;
+  function scrapeHeaders() {
+    const h = { "Content-Type": "application/json" };
+    if (scraperTokenRequired && tok) {
+      h["X-Scraper-Token"] = (tok.value || "").trim();
+    }
+    return h;
   }
 
   document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
-    const token = (tok.value || "").trim();
     const url = (urlIn.value || "").trim();
-    if (!tokenNonEmpty(token)) {
-      alert("Wpisz sekret / token w polu powyżej (zapisuje się w tej przeglądarce). Bez ustawionego SCRAPER_TOKEN na serwerze wymagane jest min. 24 znaki — zobacz komunikat z serwera po próbie.");
-      return;
+    if (scraperTokenRequired) {
+      const t = (tok && tok.value ? tok.value : "").trim();
+      if (!t) {
+        alert("Wymagany jest sekret skrapera (SCRAPER_REQUIRE_TOKEN=1 na serwerze).");
+        return;
+      }
     }
     out.hidden = true;
     try {
       const res = await fetch("/api/scrape/preview", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Scraper-Token": token,
-        },
+        headers: scrapeHeaders(),
         body: JSON.stringify({ url: url }),
       });
       const data = await res.json();
@@ -344,20 +361,19 @@
   });
 
   document.getElementById("btn-scrape-markets").addEventListener("click", async function () {
-    const token = (tok.value || "").trim();
     const n = parseInt(String(lim.value || "15"), 10);
-    if (!tokenNonEmpty(token)) {
-      alert("Wpisz sekret / token w polu powyżej.");
-      return;
+    if (scraperTokenRequired) {
+      const t = (tok && tok.value ? tok.value : "").trim();
+      if (!t) {
+        alert("Wymagany jest sekret skrapera (SCRAPER_REQUIRE_TOKEN=1 na serwerze).");
+        return;
+      }
     }
     out.hidden = true;
     try {
       const res = await fetch("/api/scrape/obi/markets", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Scraper-Token": token,
-        },
+        headers: scrapeHeaders(),
         body: JSON.stringify({ limit: n, delay_sec: 0.35 }),
       });
       const data = await res.json();

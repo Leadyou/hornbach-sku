@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -36,20 +37,32 @@ class OBIEnrichBody(BaseModel):
     delay_sec: float = Field(default=0.3, ge=0.0, le=2.0)
 
 
-_MIN_CLIENT_SCRAPER_TOKEN_LEN = 24
+def _env_truthy(name: str) -> bool:
+    v = (os.getenv(name) or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
+def _scraper_token_required() -> bool:
+    """Włącz SCRAPER_REQUIRE_TOKEN=1, żeby wymagać X-Scraper-Token (patrz _scrape_authenticated)."""
+    return _env_truthy("SCRAPER_REQUIRE_TOKEN")
+
+
+SCRAPER_PIN_MIN_LEN = 8
 
 
 def _scrape_authenticated(request: Request) -> bool:
-    """
-    Jeśli SCRAPER_TOKEN jest na serwerze — nagłówek musi się zgadzać.
-    Jeśli nie ma SCRAPER_TOKEN — użytkownik ustawia własny długi sekret tylko w przeglądarce (≥24 zn.)
-    i wysyła go w X-Scraper-Token (mniej sztywne niż wymóg zmiennej na Vercelu).
-    """
-    expected = (os.getenv("SCRAPER_TOKEN") or "").strip()
+    if not _scraper_token_required():
+        return True
     got = (request.headers.get("X-Scraper-Token") or "").strip()
-    if expected:
-        return got == expected
-    return len(got) >= _MIN_CLIENT_SCRAPER_TOKEN_LEN
+    pin = (os.getenv("SCRAPER_PIN") or "").strip()
+    long_tok = (os.getenv("SCRAPER_TOKEN") or "").strip()
+    if not pin and not long_tok:
+        return False
+    if pin and len(pin) >= SCRAPER_PIN_MIN_LEN and len(got) == len(pin) and secrets.compare_digest(got, pin):
+        return True
+    if long_tok and len(got) == len(long_tok) and secrets.compare_digest(got, long_tok):
+        return True
+    return False
 
 
 @asynccontextmanager
@@ -64,6 +77,22 @@ async def lifespan(app: FastAPI):
         )
     if app.state.supabase_config_error:
         print("hornbach-sku config:", app.state.supabase_config_error, flush=True)
+    if _scraper_token_required():
+        pin = (os.getenv("SCRAPER_PIN") or "").strip()
+        long_tok = (os.getenv("SCRAPER_TOKEN") or "").strip()
+        if pin and len(pin) < SCRAPER_PIN_MIN_LEN:
+            print(
+                "hornbach-sku config: SCRAPER_PIN jest krótszy niż",
+                SCRAPER_PIN_MIN_LEN,
+                "— skraper nie zaakceptuje tego hasła.",
+                flush=True,
+            )
+        if not pin and not long_tok:
+            print(
+                "hornbach-sku config: SCRAPER_REQUIRE_TOKEN=1, ale brak SCRAPER_PIN i SCRAPER_TOKEN — "
+                "endpointy skrapera zwrócą 403.",
+                flush=True,
+            )
     yield
 
 
@@ -112,7 +141,12 @@ def home(request: Request):
         return _db_error_response(request, e)
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "sku_count": count},
+        {
+            "request": request,
+            "sku_count": count,
+            "scraper_token_required": _scraper_token_required(),
+            "scraper_pin_min_len": SCRAPER_PIN_MIN_LEN,
+        },
     )
 
 
@@ -133,8 +167,9 @@ def _scrape_auth_error() -> JSONResponse:
     return JSONResponse(
         {
             "ok": False,
-            "message": "Brak lub za krótki token. W panelu „OBI Zapasy” ustaw sekret (min. 24 znaki) "
-            "albo na serwerze ustaw SCRAPER_TOKEN i użyj tej samej wartości w polu.",
+            "message": "Brak lub złe hasło skrapera. Na serwerze ustaw SCRAPER_PIN (min. "
+            f"{SCRAPER_PIN_MIN_LEN} znaków — to samo wpisujesz w UI) i/lub opcjonalnie SCRAPER_TOKEN "
+            "(długi sekret dla skryptów; nagłówek X-Scraper-Token musi się zgadzać).",
         },
         status_code=403,
     )

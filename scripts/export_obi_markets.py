@@ -8,7 +8,7 @@ Uruchom lokalnie (może potrwać kilka minut przy ~400 sklepach):
   source .venv/bin/activate
   python scripts/export_obi_markets.py -o obi_markets.csv
 
-Nie ustawiaj SCRAPER_TOKEN — ten skrypt woła moduły bezpośrednio.
+Ten skrypt woła moduły skrapera bezpośrednio (bez HTTP).
 """
 from __future__ import annotations
 
