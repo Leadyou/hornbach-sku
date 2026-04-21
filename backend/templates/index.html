@@ -55,12 +55,40 @@
           <button type="submit" class="btn-primary">Importuj</button>
         </form>
         <div id="import-result" class="import-result" hidden></div>
+
+        <hr class="drawer-divider" />
+        <section class="drawer-section">
+          <h3 class="drawer-h3">Pobieranie z WWW (OBI.de)</h3>
+          {% if scraper_enabled %}
+          <p class="hint">Wpisz ten sam sekret co w zmiennej <code>SCRAPER_TOKEN</code> na serwerze. Żądania idą tylko na hosty z <code>SCRAPE_ALLOWED_HOSTS</code> (domyślnie obi.de).</p>
+          <label class="field">
+            <span class="field-label">Token skrapera</span>
+            <input id="scraper-token" type="password" autocomplete="off" placeholder="SCRAPER_TOKEN" />
+          </label>
+          <label class="field">
+            <span class="field-label">Adres URL</span>
+            <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
+          </label>
+          <div class="scraper-actions">
+            <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
+            <label class="inline-limit">
+              <span class="field-label">Ile sklepów</span>
+              <input id="scraper-limit" type="number" min="1" max="500" value="15" />
+            </label>
+            <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
+          </div>
+          <pre id="scrape-out" class="scrape-out" hidden></pre>
+          {% else %}
+          <p class="hint">Ta sekcja jest wyłączona, dopóki nie ustawisz na serwerze zmiennej <code>SCRAPER_TOKEN</code> (np. w Vercel / .env). Chroni to przed nieautoryzowanym pobieraniem stron z Twojej aplikacji.</p>
+          {% endif %}
+        </section>
       </div>
     </aside>
   </div>
 
   <script>
 (function () {
+  const scraperEnabled = {{ scraper_enabled | tojson }};
   const sku = document.getElementById("inp-sku");
   const qty = document.getElementById("inp-qty");
   const report = document.getElementById("report");
@@ -216,6 +244,75 @@
       importResult.hidden = false;
     }
   });
+
+  if (scraperEnabled) {
+    const tok = document.getElementById("scraper-token");
+    const urlIn = document.getElementById("scraper-url");
+    const lim = document.getElementById("scraper-limit");
+    const out = document.getElementById("scrape-out");
+    const key = "hornbach_scraper_token";
+    try {
+      tok.value = sessionStorage.getItem(key) || "";
+    } catch (e) {}
+    tok.addEventListener("change", function () {
+      try {
+        sessionStorage.setItem(key, tok.value);
+      } catch (e) {}
+    });
+
+    function showScrape(obj) {
+      out.textContent = JSON.stringify(obj, null, 2);
+      out.hidden = false;
+    }
+
+    document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
+      const token = (tok.value || "").trim();
+      const url = (urlIn.value || "").trim();
+      if (!token) {
+        alert("Wpisz token.");
+        return;
+      }
+      out.hidden = true;
+      try {
+        const res = await fetch("/api/scrape/preview", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Scraper-Token": token,
+          },
+          body: JSON.stringify({ url: url }),
+        });
+        const data = await res.json();
+        showScrape(data);
+      } catch (e) {
+        showScrape({ ok: false, message: String(e) });
+      }
+    });
+
+    document.getElementById("btn-scrape-markets").addEventListener("click", async function () {
+      const token = (tok.value || "").trim();
+      const n = parseInt(String(lim.value || "15"), 10);
+      if (!token) {
+        alert("Wpisz token.");
+        return;
+      }
+      out.hidden = true;
+      try {
+        const res = await fetch("/api/scrape/obi/markets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Scraper-Token": token,
+          },
+          body: JSON.stringify({ limit: n, delay_sec: 0.35 }),
+        });
+        const data = await res.json();
+        showScrape(data);
+      } catch (e) {
+        showScrape({ ok: false, message: String(e) });
+      }
+    });
+  }
 })();
   </script>
 </body>

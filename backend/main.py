@@ -27,6 +27,22 @@ class AnalyzeRequest(BaseModel):
     quantity: int = Field(default=1, ge=1, le=10_000_000)
 
 
+class ScrapePreviewBody(BaseModel):
+    url: str = Field(max_length=2048)
+
+
+class OBIEnrichBody(BaseModel):
+    limit: int = Field(default=20, ge=1, le=500)
+    delay_sec: float = Field(default=0.3, ge=0.0, le=2.0)
+
+
+def _scrape_authenticated(request: Request) -> bool:
+    expected = (os.getenv("SCRAPER_TOKEN") or "").strip()
+    if not expected:
+        return False
+    return (request.headers.get("X-Scraper-Token") or "").strip() == expected
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_dotenv(ROOT_DIR / ".env")
@@ -85,9 +101,10 @@ def home(request: Request):
     except Exception as e:
         print("hornbach-sku count_skus:", repr(e), flush=True)
         return _db_error_response(request, e)
+    scraper_on = bool((os.getenv("SCRAPER_TOKEN") or "").strip())
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "sku_count": count},
+        {"request": request, "sku_count": count, "scraper_enabled": scraper_on},
     )
 
 
@@ -102,6 +119,71 @@ def api_analyze(request: Request, body: AnalyzeRequest):
     except Exception as e:
         print("hornbach-sku api_analyze:", repr(e), flush=True)
         return JSONResponse({"ok": False, "code": "server", "message": str(e)}, status_code=500)
+
+
+@app.post("/api/scrape/preview")
+def api_scrape_preview(request: Request, body: ScrapePreviewBody):
+    if not _scrape_authenticated(request):
+        return JSONResponse({"ok": False, "message": "Niedostępne."}, status_code=404)
+    bad = _config_error_response(request)
+    if bad:
+        return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
+    try:
+        from backend.scrape.extract_html import (
+            extract_next_data,
+            extract_obi_market_slugs,
+            summarize_next_data,
+        )
+        from backend.scrape.fetch_html import fetch_html
+
+        html = fetch_html(body.url)
+        nd = extract_next_data(html)
+        slugs = extract_obi_market_slugs(html)
+        return JSONResponse(
+            {
+                "ok": True,
+                "url": body.url,
+                "html_chars": len(html),
+                "next_data_summary": summarize_next_data(nd),
+                "obi_market_slugs_count": len(slugs),
+                "obi_market_slugs_sample": slugs[:50],
+            }
+        )
+    except ValueError as e:
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+    except Exception as e:
+        print("hornbach-sku scrape_preview:", repr(e), flush=True)
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
+
+
+@app.post("/api/scrape/obi/markets")
+def api_scrape_obi_markets(request: Request, body: OBIEnrichBody):
+    if not _scrape_authenticated(request):
+        return JSONResponse({"ok": False, "message": "Niedostępne."}, status_code=404)
+    bad = _config_error_response(request)
+    if bad:
+        return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
+    try:
+        from backend.scrape.obi_catalog import enrich_markets, list_market_slugs
+
+        all_slugs = list_market_slugs()
+        take = all_slugs[: body.limit]
+        rows = enrich_markets(take, delay_sec=body.delay_sec)
+        return JSONResponse(
+            {
+                "ok": True,
+                "slug_total": len(all_slugs),
+                "fetched": len(rows),
+                "rows": rows,
+                "hint": "Kolumna postal_code_guess to heurystyka z HTML (należy zweryfikować). "
+                "Pełna siatka EAN×sklep×zapas wymaga osobnego źródła danych OBI (API partnera / analiza PDP).",
+            }
+        )
+    except ValueError as e:
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+    except Exception as e:
+        print("hornbach-sku scrape_obi_markets:", repr(e), flush=True)
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
 
 
 @app.post("/api/import")

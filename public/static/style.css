@@ -339,6 +339,70 @@ input:focus {
   font-size: 0.85rem;
 }
 
+.drawer-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+.drawer-section {
+  margin-top: 0.5rem;
+}
+
+.drawer-h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.btn-secondary {
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #1a222c;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent-dim);
+}
+
+.scraper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-top: 1rem;
+}
+
+.inline-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.inline-limit input {
+  width: 5rem;
+}
+
+.scrape-out {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  max-height: 280px;
+  overflow: auto;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: #0a0e12;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #c5d4e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 code {
   font-size: 0.78rem;
   background: #0e1318;

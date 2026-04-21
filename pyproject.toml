@@ -9,4 +9,5 @@ dependencies = [
   "python-multipart==0.0.17",
   "supabase==2.11.0",
   "python-dotenv==1.0.1",
+  "httpx==0.28.1",
 ]
