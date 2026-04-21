@@ -14,9 +14,14 @@
         <h1 class="topbar-title">Dostępność SKU</h1>
         <p class="topbar-meta">Pozycji w katalogu: <strong>{{ sku_count }}</strong></p>
       </div>
-      <button type="button" class="btn-tab" id="btn-data" aria-expanded="false" aria-controls="data-drawer">
-        Data
-      </button>
+      <div class="topbar-actions">
+        <button type="button" class="btn-tab" id="btn-obi" aria-expanded="false" aria-controls="obi-drawer">
+          OBI Zapasy
+        </button>
+        <button type="button" class="btn-tab" id="btn-data" aria-expanded="false" aria-controls="data-drawer">
+          Data
+        </button>
+      </div>
     </header>
 
     <section class="card card-main">
@@ -55,51 +60,92 @@
           <button type="submit" class="btn-primary">Importuj</button>
         </form>
         <div id="import-result" class="import-result" hidden></div>
+      </div>
+    </aside>
+  </div>
 
-        <hr class="drawer-divider" />
-        <section class="drawer-section">
-          <h3 class="drawer-h3">Pobieranie z WWW (OBI.de)</h3>
-          {% if scraper_enabled %}
-          <p class="hint">Wpisz ten sam sekret co w zmiennej <code>SCRAPER_TOKEN</code> na serwerze. Żądania idą tylko na hosty z <code>SCRAPE_ALLOWED_HOSTS</code> (domyślnie obi.de).</p>
-          <label class="field">
-            <span class="field-label">Token skrapera</span>
-            <input id="scraper-token" type="password" autocomplete="off" placeholder="SCRAPER_TOKEN" />
+  <div id="obi-drawer" class="drawer" hidden>
+    <div class="drawer-backdrop" id="obi-drawer-backdrop" tabindex="-1"></div>
+    <aside class="drawer-panel" id="obi-drawer-panel" role="dialog" aria-labelledby="obi-drawer-title">
+      <div class="drawer-head">
+        <h2 id="obi-drawer-title">OBI Zapasy</h2>
+        <button type="button" class="btn-close" id="btn-close-obi" aria-label="Zamknij">×</button>
+      </div>
+      <div class="drawer-body">
+        <p class="hint">
+          <strong>Sekret (token)</strong> — wpisz raz; zapisujemy go w tej przeglądarce (<code>localStorage</code>).
+          Na serwerze <em>nie musisz</em> mieć <code>SCRAPER_TOKEN</code>: wtedy wystarczy sekret o długości co najmniej <strong>24 znaki</strong>.
+          Jeśli ustawisz <code>SCRAPER_TOKEN</code> na Vercelu — wpisz tutaj <strong>dokładnie tę samą</strong> wartość.
+        </p>
+        <label class="field">
+          <span class="field-label">Sekret / wartość tokena</span>
+          <input id="scraper-token" type="password" autocomplete="off" placeholder="min. 24 znaków (lub = SCRAPER_TOKEN z serwera)" />
+        </label>
+        <label class="field">
+          <span class="field-label">Adres URL</span>
+          <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
+        </label>
+        <div class="scraper-actions">
+          <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
+          <label class="inline-limit">
+            <span class="field-label">Ile sklepów</span>
+            <input id="scraper-limit" type="number" min="1" max="500" value="15" />
           </label>
-          <label class="field">
-            <span class="field-label">Adres URL</span>
-            <input id="scraper-url" type="url" value="https://www.obi.de/markt" />
-          </label>
-          <div class="scraper-actions">
-            <button type="button" class="btn-secondary" id="btn-scrape-preview">Podgląd strony</button>
-            <label class="inline-limit">
-              <span class="field-label">Ile sklepów</span>
-              <input id="scraper-limit" type="number" min="1" max="500" value="15" />
-            </label>
-            <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
-          </div>
-          <pre id="scrape-out" class="scrape-out" hidden></pre>
-          {% else %}
-          <p class="hint">Ta sekcja jest wyłączona, dopóki nie ustawisz na serwerze zmiennej <code>SCRAPER_TOKEN</code> (np. w Vercel / .env). Chroni to przed nieautoryzowanym pobieraniem stron z Twojej aplikacji.</p>
-          {% endif %}
-        </section>
+          <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
+        </div>
+        <pre id="scrape-out" class="scrape-out" hidden></pre>
       </div>
     </aside>
   </div>
 
   <script>
 (function () {
-  const scraperEnabled = {{ scraper_enabled | tojson }};
   const sku = document.getElementById("inp-sku");
   const qty = document.getElementById("inp-qty");
   const report = document.getElementById("report");
   const statusEl = document.getElementById("analyze-status");
-  const drawer = document.getElementById("data-drawer");
+  const dataDrawer = document.getElementById("data-drawer");
   const btnData = document.getElementById("btn-data");
-  const btnClose = document.getElementById("btn-close-drawer");
-  const backdrop = document.getElementById("drawer-backdrop");
+  const btnCloseData = document.getElementById("btn-close-drawer");
+  const backdropData = document.getElementById("drawer-backdrop");
+  const obiDrawer = document.getElementById("obi-drawer");
+  const btnObi = document.getElementById("btn-obi");
+  const btnCloseObi = document.getElementById("btn-close-obi");
+  const backdropObi = document.getElementById("obi-drawer-backdrop");
   const formImport = document.getElementById("form-import");
   const importResult = document.getElementById("import-result");
   let timer = null;
+
+  function anyDrawerOpen() {
+    return !dataDrawer.hidden || !obiDrawer.hidden;
+  }
+  function syncBodyScroll() {
+    document.body.classList.toggle("drawer-open", anyDrawerOpen());
+  }
+  function closeDataDrawer() {
+    dataDrawer.hidden = true;
+    btnData.setAttribute("aria-expanded", "false");
+    syncBodyScroll();
+  }
+  function openDataDrawer() {
+    obiDrawer.hidden = true;
+    btnObi.setAttribute("aria-expanded", "false");
+    dataDrawer.hidden = false;
+    btnData.setAttribute("aria-expanded", "true");
+    syncBodyScroll();
+  }
+  function closeObiDrawer() {
+    obiDrawer.hidden = true;
+    btnObi.setAttribute("aria-expanded", "false");
+    syncBodyScroll();
+  }
+  function openObiDrawer() {
+    dataDrawer.hidden = true;
+    btnData.setAttribute("aria-expanded", "false");
+    obiDrawer.hidden = false;
+    btnObi.setAttribute("aria-expanded", "true");
+    syncBodyScroll();
+  }
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -197,21 +243,24 @@
   sku.addEventListener("input", scheduleAnalyze);
   qty.addEventListener("input", scheduleAnalyze);
 
-  function openDrawer() {
-    drawer.hidden = false;
-    btnData.setAttribute("aria-expanded", "true");
-    document.body.classList.add("drawer-open");
-  }
-  function closeDrawer() {
-    drawer.hidden = true;
-    btnData.setAttribute("aria-expanded", "false");
-    document.body.classList.remove("drawer-open");
-  }
-  btnData.addEventListener("click", openDrawer);
-  btnClose.addEventListener("click", closeDrawer);
-  backdrop.addEventListener("click", closeDrawer);
+  btnData.addEventListener("click", function () {
+    if (dataDrawer.hidden) openDataDrawer();
+    else closeDataDrawer();
+  });
+  btnCloseData.addEventListener("click", closeDataDrawer);
+  backdropData.addEventListener("click", closeDataDrawer);
+
+  btnObi.addEventListener("click", function () {
+    if (obiDrawer.hidden) openObiDrawer();
+    else closeObiDrawer();
+  });
+  btnCloseObi.addEventListener("click", closeObiDrawer);
+  backdropObi.addEventListener("click", closeObiDrawer);
+
   document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape" && !drawer.hidden) closeDrawer();
+    if (ev.key !== "Escape") return;
+    if (!obiDrawer.hidden) closeObiDrawer();
+    else if (!dataDrawer.hidden) closeDataDrawer();
   });
 
   formImport.addEventListener("submit", async function (ev) {
@@ -245,74 +294,78 @@
     }
   });
 
-  if (scraperEnabled) {
-    const tok = document.getElementById("scraper-token");
-    const urlIn = document.getElementById("scraper-url");
-    const lim = document.getElementById("scraper-limit");
-    const out = document.getElementById("scrape-out");
-    const key = "hornbach_scraper_token";
+  const tok = document.getElementById("scraper-token");
+  const urlIn = document.getElementById("scraper-url");
+  const lim = document.getElementById("scraper-limit");
+  const out = document.getElementById("scrape-out");
+  const LS_TOKEN = "hornbach_scraper_token";
+  try {
+    tok.value = localStorage.getItem(LS_TOKEN) || "";
+  } catch (e) {}
+  function persistToken() {
     try {
-      tok.value = sessionStorage.getItem(key) || "";
+      localStorage.setItem(LS_TOKEN, tok.value);
     } catch (e) {}
-    tok.addEventListener("change", function () {
-      try {
-        sessionStorage.setItem(key, tok.value);
-      } catch (e) {}
-    });
-
-    function showScrape(obj) {
-      out.textContent = JSON.stringify(obj, null, 2);
-      out.hidden = false;
-    }
-
-    document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
-      const token = (tok.value || "").trim();
-      const url = (urlIn.value || "").trim();
-      if (!token) {
-        alert("Wpisz token.");
-        return;
-      }
-      out.hidden = true;
-      try {
-        const res = await fetch("/api/scrape/preview", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Scraper-Token": token,
-          },
-          body: JSON.stringify({ url: url }),
-        });
-        const data = await res.json();
-        showScrape(data);
-      } catch (e) {
-        showScrape({ ok: false, message: String(e) });
-      }
-    });
-
-    document.getElementById("btn-scrape-markets").addEventListener("click", async function () {
-      const token = (tok.value || "").trim();
-      const n = parseInt(String(lim.value || "15"), 10);
-      if (!token) {
-        alert("Wpisz token.");
-        return;
-      }
-      out.hidden = true;
-      try {
-        const res = await fetch("/api/scrape/obi/markets", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Scraper-Token": token,
-          },
-          body: JSON.stringify({ limit: n, delay_sec: 0.35 }),
-        });
-        const data = await res.json();
-        showScrape(data);
-      } catch (e) {
-        showScrape({ ok: false, message: String(e) });
-      }
-    });
   }
+  tok.addEventListener("input", persistToken);
+  tok.addEventListener("change", persistToken);
+
+  function showScrape(obj) {
+    out.textContent = JSON.stringify(obj, null, 2);
+    out.hidden = false;
+  }
+
+  function tokenNonEmpty(t) {
+    return (t || "").trim().length > 0;
+  }
+
+  document.getElementById("btn-scrape-preview").addEventListener("click", async function () {
+    const token = (tok.value || "").trim();
+    const url = (urlIn.value || "").trim();
+    if (!tokenNonEmpty(token)) {
+      alert("Wpisz sekret / token w polu powyżej (zapisuje się w tej przeglądarce). Bez ustawionego SCRAPER_TOKEN na serwerze wymagane jest min. 24 znaki — zobacz komunikat z serwera po próbie.");
+      return;
+    }
+    out.hidden = true;
+    try {
+      const res = await fetch("/api/scrape/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Scraper-Token": token,
+        },
+        body: JSON.stringify({ url: url }),
+      });
+      const data = await res.json();
+      showScrape(data);
+    } catch (e) {
+      showScrape({ ok: false, message: String(e) });
+    }
+  });
+
+  document.getElementById("btn-scrape-markets").addEventListener("click", async function () {
+    const token = (tok.value || "").trim();
+    const n = parseInt(String(lim.value || "15"), 10);
+    if (!tokenNonEmpty(token)) {
+      alert("Wpisz sekret / token w polu powyżej.");
+      return;
+    }
+    out.hidden = true;
+    try {
+      const res = await fetch("/api/scrape/obi/markets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Scraper-Token": token,
+        },
+        body: JSON.stringify({ limit: n, delay_sec: 0.35 }),
+      });
+      const data = await res.json();
+      showScrape(data);
+    } catch (e) {
+      showScrape({ ok: false, message: String(e) });
+    }
+  });
 })();
   </script>
 </body>

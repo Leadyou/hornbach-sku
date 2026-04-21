@@ -38,6 +38,7 @@ body.drawer-open {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
@@ -61,6 +62,13 @@ body.drawer-open {
   margin: 0;
   font-size: 0.88rem;
   color: var(--muted);
+}
+
+.topbar-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 0.45rem;
 }
 
 .btn-tab {

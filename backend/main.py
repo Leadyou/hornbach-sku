@@ -36,11 +36,20 @@ class OBIEnrichBody(BaseModel):
     delay_sec: float = Field(default=0.3, ge=0.0, le=2.0)
 
 
+_MIN_CLIENT_SCRAPER_TOKEN_LEN = 24
+
+
 def _scrape_authenticated(request: Request) -> bool:
+    """
+    Jeśli SCRAPER_TOKEN jest na serwerze — nagłówek musi się zgadzać.
+    Jeśli nie ma SCRAPER_TOKEN — użytkownik ustawia własny długi sekret tylko w przeglądarce (≥24 zn.)
+    i wysyła go w X-Scraper-Token (mniej sztywne niż wymóg zmiennej na Vercelu).
+    """
     expected = (os.getenv("SCRAPER_TOKEN") or "").strip()
-    if not expected:
-        return False
-    return (request.headers.get("X-Scraper-Token") or "").strip() == expected
+    got = (request.headers.get("X-Scraper-Token") or "").strip()
+    if expected:
+        return got == expected
+    return len(got) >= _MIN_CLIENT_SCRAPER_TOKEN_LEN
 
 
 @asynccontextmanager
@@ -101,10 +110,9 @@ def home(request: Request):
     except Exception as e:
         print("hornbach-sku count_skus:", repr(e), flush=True)
         return _db_error_response(request, e)
-    scraper_on = bool((os.getenv("SCRAPER_TOKEN") or "").strip())
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "sku_count": count, "scraper_enabled": scraper_on},
+        {"request": request, "sku_count": count},
     )
 
 
@@ -121,10 +129,21 @@ def api_analyze(request: Request, body: AnalyzeRequest):
         return JSONResponse({"ok": False, "code": "server", "message": str(e)}, status_code=500)
 
 
+def _scrape_auth_error() -> JSONResponse:
+    return JSONResponse(
+        {
+            "ok": False,
+            "message": "Brak lub za krótki token. W panelu „OBI Zapasy” ustaw sekret (min. 24 znaki) "
+            "albo na serwerze ustaw SCRAPER_TOKEN i użyj tej samej wartości w polu.",
+        },
+        status_code=403,
+    )
+
+
 @app.post("/api/scrape/preview")
 def api_scrape_preview(request: Request, body: ScrapePreviewBody):
     if not _scrape_authenticated(request):
-        return JSONResponse({"ok": False, "message": "Niedostępne."}, status_code=404)
+        return _scrape_auth_error()
     bad = _config_error_response(request)
     if bad:
         return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
@@ -159,7 +178,7 @@ def api_scrape_preview(request: Request, body: ScrapePreviewBody):
 @app.post("/api/scrape/obi/markets")
 def api_scrape_obi_markets(request: Request, body: OBIEnrichBody):
     if not _scrape_authenticated(request):
-        return JSONResponse({"ok": False, "message": "Niedostępne."}, status_code=404)
+        return _scrape_auth_error()
     bad = _config_error_response(request)
     if bad:
         return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
