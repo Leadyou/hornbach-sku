@@ -135,7 +135,8 @@ input[type="text"],
 input[type="number"],
 input[type="file"],
 input[type="password"],
-input[type="url"] {
+input[type="url"],
+textarea {
   padding: 0.65rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -144,7 +145,15 @@ input[type="url"] {
   font-size: 1rem;
 }
 
-input:focus {
+textarea {
+  min-height: 4rem;
+  resize: vertical;
+  font-family: var(--font);
+  line-height: 1.4;
+}
+
+input:focus,
+textarea:focus {
   outline: 2px solid var(--accent-dim);
   outline-offset: 1px;
 }
@@ -419,6 +428,16 @@ input[type="password"].scraper-pin-invalid:focus {
 
 .btn-secondary:hover {
   border-color: var(--accent-dim);
+}
+
+.scraper-obi-stock-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.scraper-obi-stock-block .btn-secondary {
+  margin-top: 0.5rem;
 }
 
 .scraper-actions {
