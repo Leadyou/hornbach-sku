@@ -458,6 +458,10 @@ input[type="password"].scraper-pin-invalid:focus {
   width: 5rem;
 }
 
+.scrape-export-row {
+  margin-top: 0.75rem;
+}
+
 .scrape-markets-wrap {
   margin-top: 1rem;
 }

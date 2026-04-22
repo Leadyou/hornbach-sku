@@ -134,6 +134,9 @@
                 <tbody id="scrape-markets-tbody"></tbody>
               </table>
             </div>
+            <div class="scrape-export-row">
+              <button type="button" class="btn-secondary" id="btn-export-markets-csv">Eksportuj CSV</button>
+            </div>
           </div>
           <div id="scrape-stock-wrap" class="scrape-markets-wrap" hidden>
             <p id="scrape-stock-meta" class="hint scrape-markets-meta" hidden></p>
@@ -147,6 +150,9 @@
                 </thead>
                 <tbody id="scrape-stock-tbody"></tbody>
               </table>
+            </div>
+            <div class="scrape-export-row">
+              <button type="button" class="btn-secondary" id="btn-export-stock-csv">Eksportuj CSV</button>
             </div>
           </div>
           <pre id="scrape-out" class="scrape-out" hidden></pre>
@@ -409,6 +415,25 @@
   const stockTbody = document.getElementById("scrape-stock-tbody");
   const stockMeta = document.getElementById("scrape-stock-meta");
   const obiProductId = document.getElementById("obi-product-id");
+  var lastStockResult = null;
+  var lastMarketsResult = null;
+
+  function csvEscapeField(v) {
+    var s = v == null ? "" : String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function downloadTextFile(filename, text, mime) {
+    var BOM = "\uFEFF";
+    var blob = new Blob([BOM + text], { type: mime || "text/csv;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
   const LS_TOKEN = "hornbach_scraper_pin";
   if (scraperTokenRequired && tok) {
     try {
@@ -515,6 +540,8 @@
         stockMeta.textContent = sm + ".";
         stockMeta.hidden = false;
       }
+      lastStockResult = obj;
+      lastMarketsResult = null;
       return;
     }
     if (
@@ -552,6 +579,8 @@
         marketsMeta.textContent = parts.join(" · ") + ".";
         marketsMeta.hidden = false;
       }
+      lastMarketsResult = obj;
+      lastStockResult = null;
       return;
     }
     if (marketsWrap) marketsWrap.hidden = true;
@@ -564,6 +593,8 @@
       stockMeta.hidden = true;
       stockMeta.textContent = "";
     }
+    lastStockResult = null;
+    lastMarketsResult = null;
     out.textContent = JSON.stringify(obj, null, 2);
     out.hidden = false;
   }
@@ -652,6 +683,40 @@
     } catch (e2) {
       showScrape({ ok: false, message: String(e2) });
     }
+  });
+
+  document.getElementById("btn-export-stock-csv").addEventListener("click", function () {
+    if (!lastStockResult || !lastStockResult.ok || !lastStockResult.stock_rows || !lastStockResult.stock_rows.length) {
+      return;
+    }
+    var lines = ["storeId,availableQuantity"];
+    for (var ei = 0; ei < lastStockResult.stock_rows.length; ei++) {
+      var er = lastStockResult.stock_rows[ei];
+      lines.push(csvEscapeField(er.storeId) + "," + csvEscapeField(er.availableQuantity));
+    }
+    var fn = "obi_zapas_" + String(lastStockResult.product_id || "produkt").replace(/[^\w.-]+/g, "_") + ".csv";
+    downloadTextFile(fn, lines.join("\r\n"), "text/csv;charset=utf-8");
+  });
+
+  document.getElementById("btn-export-markets-csv").addEventListener("click", function () {
+    if (!lastMarketsResult || !lastMarketsResult.ok || !lastMarketsResult.rows || !lastMarketsResult.rows.length) {
+      return;
+    }
+    var hdr = ["slug", "url", "title", "postal_code_guess"];
+    var L = [hdr.join(",")];
+    for (var mj = 0; mj < lastMarketsResult.rows.length; mj++) {
+      var mr = lastMarketsResult.rows[mj];
+      L.push(
+        csvEscapeField(mr.slug) +
+          "," +
+          csvEscapeField(mr.url) +
+          "," +
+          csvEscapeField(mr.title) +
+          "," +
+          csvEscapeField(mr.postal_code_guess)
+      );
+    }
+    downloadTextFile("obi_sklepy.csv", L.join("\r\n"), "text/csv;charset=utf-8");
   });
 })();
   </script>
