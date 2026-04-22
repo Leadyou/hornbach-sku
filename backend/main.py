@@ -33,6 +33,12 @@ class OBIEnrichBody(BaseModel):
     delay_sec: float = Field(default=0.3, ge=0.0, le=2.0)
 
 
+class OBIStockBody(BaseModel):
+    product_id: str = Field(max_length=20)
+    store_ids_csv: Optional[str] = Field(default=None, max_length=400_000)
+    delay_sec: float = Field(default=0.12, ge=0.0, le=2.0)
+
+
 def _env_truthy(name: str) -> bool:
     v = (os.getenv(name) or "").strip().lower()
     return v in ("1", "true", "yes", "on")
@@ -208,6 +214,60 @@ def api_scrape_obi_markets(request: Request, body: OBIEnrichBody):
         return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
     except Exception as e:
         print("hornbach-sku scrape_obi_markets:", repr(e), flush=True)
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
+
+
+@app.post("/api/scrape/obi/stock")
+def api_scrape_obi_stock(request: Request, body: OBIStockBody):
+    if not _scrape_authenticated(request):
+        return _scrape_auth_error()
+    bad = _config_error_response(request)
+    if bad:
+        return JSONResponse({"ok": False, "message": "Brak konfiguracji serwera."}, status_code=503)
+    pid = (body.product_id or "").strip()
+    if not pid.isdigit() or not (4 <= len(pid) <= 16):
+        return JSONResponse(
+            {"ok": False, "message": "product_id musi być liczbą (np. numer produktu OBI), 4–16 cyfr."},
+            status_code=400,
+        )
+    try:
+        from backend.scrape.obi_stock import (
+            default_store_ids,
+            fetch_product_stock,
+            parse_store_ids_csv,
+        )
+
+        raw_csv = (body.store_ids_csv or "").strip()
+        store_ids = parse_store_ids_csv(raw_csv) if raw_csv else default_store_ids()
+        if not store_ids:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "message": "Brak listy sklepów: uzupełnij plik backend/scrape/data/obi_default_store_ids.txt "
+                    "(ID rozdzielone przecinkami) lub wyślij store_ids_csv w żądaniu API.",
+                },
+                status_code=400,
+            )
+        if len(store_ids) > 1200:
+            return JSONResponse(
+                {"ok": False, "message": f"Za dużo sklepów naraz ({len(store_ids)}). Maksimum 1200."},
+                status_code=400,
+            )
+        rows, batches = fetch_product_stock(pid, store_ids, delay_sec=body.delay_sec)
+        return JSONResponse(
+            {
+                "ok": True,
+                "product_id": pid,
+                "store_count": len(store_ids),
+                "http_batches": batches,
+                "stock_rows": rows,
+                "hint": "Wewnętrzne: tylko storeId i availableQuantity z API OBI; zapytania partiami po 50 sklepów.",
+            }
+        )
+    except ValueError as e:
+        return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+    except Exception as e:
+        print("hornbach-sku scrape_obi_stock:", repr(e), flush=True)
         return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
 
 

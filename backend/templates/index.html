@@ -109,6 +109,18 @@
             </label>
             <button type="button" class="btn-secondary" id="btn-scrape-markets">Pobierz sklepy (PLZ heurystycznie)</button>
           </div>
+          <div class="scraper-obi-stock-block">
+            <p class="hint hint-muted">
+              <strong>Wewnętrznie.</strong> Jedna wartość: numer produktu OBI. Wynik to wyłącznie
+              <strong>ID sklepu OBI</strong> i <strong>ilość</strong> (bez nazw i adresów). Lista sklepów jest na serwerze
+              (<code>backend/scrape/data/obi_default_store_ids.txt</code>). API wywoływane w partiach po <strong>50</strong> sklepach.
+            </p>
+            <label class="field">
+              <span class="field-label">Numer produktu OBI</span>
+              <input id="obi-product-id" type="text" inputmode="numeric" maxlength="16" value="2682532" autocomplete="off" />
+            </label>
+            <button type="button" class="btn-secondary" id="btn-scrape-stock">Zapasy w sklepach (API)</button>
+          </div>
           <div id="scrape-markets-wrap" class="scrape-markets-wrap" hidden>
             <p id="scrape-markets-meta" class="hint scrape-markets-meta" hidden></p>
             <div class="scrape-table-scroll">
@@ -120,6 +132,20 @@
                   </tr>
                 </thead>
                 <tbody id="scrape-markets-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="scrape-stock-wrap" class="scrape-markets-wrap" hidden>
+            <p id="scrape-stock-meta" class="hint scrape-markets-meta" hidden></p>
+            <div class="scrape-table-scroll">
+              <table class="obi-markets-table" aria-label="Zapasy produktu OBI w sklepach">
+                <thead>
+                  <tr>
+                    <th scope="col">ID sklepu OBI</th>
+                    <th scope="col">Dostępna ilość</th>
+                  </tr>
+                </thead>
+                <tbody id="scrape-stock-tbody"></tbody>
               </table>
             </div>
           </div>
@@ -379,6 +405,10 @@
   const marketsWrap = document.getElementById("scrape-markets-wrap");
   const marketsTbody = document.getElementById("scrape-markets-tbody");
   const marketsMeta = document.getElementById("scrape-markets-meta");
+  const stockWrap = document.getElementById("scrape-stock-wrap");
+  const stockTbody = document.getElementById("scrape-stock-tbody");
+  const stockMeta = document.getElementById("scrape-stock-meta");
+  const obiProductId = document.getElementById("obi-product-id");
   const LS_TOKEN = "hornbach_scraper_pin";
   if (scraperTokenRequired && tok) {
     try {
@@ -454,11 +484,52 @@
     if (
       obj &&
       obj.ok === true &&
+      Array.isArray(obj.stock_rows) &&
+      obj.stock_rows.length &&
+      stockWrap &&
+      stockTbody
+    ) {
+      if (marketsWrap) marketsWrap.hidden = true;
+      if (marketsMeta) {
+        marketsMeta.hidden = true;
+        marketsMeta.textContent = "";
+      }
+      out.hidden = true;
+      stockWrap.hidden = false;
+      var sh = "";
+      for (var si = 0; si < obj.stock_rows.length; si++) {
+        var sr = obj.stock_rows[si];
+        var sid = esc(String(sr.storeId != null ? sr.storeId : ""));
+        var aq = sr.availableQuantity;
+        var qty = aq == null || aq === "" ? "—" : esc(String(aq));
+        sh += '<tr><td class="obi-col-plz">' + sid + '</td><td>' + qty + "</td></tr>";
+      }
+      stockTbody.innerHTML = sh;
+      if (stockMeta) {
+        var sm =
+          "Produkt " +
+          esc(String(obj.product_id || "")) +
+          " · sklepów: " +
+          (obj.store_count != null ? obj.store_count : obj.stock_rows.length);
+        if (obj.http_batches != null) sm += " · zapytań API: " + obj.http_batches;
+        stockMeta.textContent = sm + ".";
+        stockMeta.hidden = false;
+      }
+      return;
+    }
+    if (
+      obj &&
+      obj.ok === true &&
       Array.isArray(obj.rows) &&
       obj.rows.length &&
       marketsWrap &&
       marketsTbody
     ) {
+      if (stockWrap) stockWrap.hidden = true;
+      if (stockMeta) {
+        stockMeta.hidden = true;
+        stockMeta.textContent = "";
+      }
       out.hidden = true;
       marketsWrap.hidden = false;
       var html = "";
@@ -487,6 +558,11 @@
     if (marketsMeta) {
       marketsMeta.hidden = true;
       marketsMeta.textContent = "";
+    }
+    if (stockWrap) stockWrap.hidden = true;
+    if (stockMeta) {
+      stockMeta.hidden = true;
+      stockMeta.textContent = "";
     }
     out.textContent = JSON.stringify(obj, null, 2);
     out.hidden = false;
@@ -536,6 +612,45 @@
       showScrape(data);
     } catch (e) {
       showScrape({ ok: false, message: String(e) });
+    }
+  });
+
+  document.getElementById("btn-scrape-stock").addEventListener("click", async function () {
+    var pid = (obiProductId && obiProductId.value ? obiProductId.value : "").trim();
+    if (!pid) {
+      showScrape({ ok: false, message: "Podaj numer produktu OBI." });
+      return;
+    }
+    if (scraperTokenRequired) {
+      var tt = (tok && tok.value ? tok.value : "").trim();
+      if (!tt) {
+        setObiUnlocked(false);
+        syncObiSteps();
+        showPinError("Wpisz PIN na pierwszym kroku.");
+        return;
+      }
+    }
+    out.hidden = true;
+    try {
+      var res2 = await fetch("/api/scrape/obi/stock", {
+        method: "POST",
+        headers: scrapeHeaders(),
+        body: JSON.stringify({
+          product_id: pid,
+          store_ids_csv: null,
+          delay_sec: 0.12,
+        }),
+      });
+      var data2 = await res2.json().catch(function () {
+        return {};
+      });
+      if (handleScrapeForbidden(res2, data2)) {
+        showScrape(data2);
+        return;
+      }
+      showScrape(data2);
+    } catch (e2) {
+      showScrape({ ok: false, message: String(e2) });
     }
   });
 })();
